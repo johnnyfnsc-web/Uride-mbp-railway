@@ -1,0 +1,27 @@
+{
+  "name": "uride",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm --workspace @uride/api run start:dev",
+    "build:api": "npm --workspace @uride/api run build",
+    "dev:passenger": "npm --workspace @uride/passenger run start",
+    "dev:driver": "npm --workspace @uride/driver run start",
+    "typecheck:passenger": "npm --workspace @uride/passenger run typecheck",
+    "typecheck:driver": "npm --workspace @uride/driver run typecheck",
+    "dev:admin": "npm --workspace @uride/admin run dev",
+    "build:admin": "npm --workspace @uride/admin run build",
+    "typecheck:admin": "npm --workspace @uride/admin run typecheck",
+    "test:foundation": "node --test tests/foundation.contract.test.mjs tests/policy.reference.test.mjs",
+    "test:live": "node tests/live-api.smoke.mjs",
+    "test:pilot": "npm run test:foundation && npm run test:live",
+    "test:pilot-gate": "node tests/pilot-readiness.mjs",
+    "pilot:setup": "bash scripts/pilot-local-setup.sh",
+    "pilot:first-ride": "node tests/pilot-first-ride.mjs"
+  }
+}

@@ -1,0 +1,3 @@
+-- URide Foundation v0.17.0 reference migration.
+-- Apply from schema.prisma using:
+-- npx prisma migrate dev --name v017_driver_documents_compliance

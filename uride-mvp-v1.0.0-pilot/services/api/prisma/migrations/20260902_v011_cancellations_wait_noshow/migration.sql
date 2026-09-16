@@ -1,0 +1,5 @@
+-- URide Foundation v0.11.0 reference migration.
+-- Generate/apply through Prisma in the target development database:
+--   npx prisma migrate dev --name v011_cancellations_wait_noshow
+-- This file intentionally documents the feature migration; Prisma should generate
+-- the provider-specific DDL from schema.prisma in the actual environment.

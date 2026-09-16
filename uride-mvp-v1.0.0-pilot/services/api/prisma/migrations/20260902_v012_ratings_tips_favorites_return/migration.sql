@@ -1,0 +1,3 @@
+-- URide Foundation v0.12.0 reference migration.
+-- Apply from schema.prisma with:
+-- npx prisma migrate dev --name v012_ratings_tips_favorites_return

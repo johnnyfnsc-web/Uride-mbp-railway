@@ -1,0 +1,3 @@
+-- URide Foundation v0.22.0 reference migration.
+-- Apply from schema.prisma using:
+-- npx prisma migrate dev --name v022_pricing_driver_earnings

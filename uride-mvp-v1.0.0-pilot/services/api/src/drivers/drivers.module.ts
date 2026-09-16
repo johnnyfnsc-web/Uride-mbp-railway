@@ -1,0 +1,2 @@
+import { Module } from '@nestjs/common'; import { DriversController } from './drivers.controller'; @Module({imports:[AuthModule],controllers:[DriversController]}) export class DriversModule {}
+import { AuthModule } from '../auth/auth.module';

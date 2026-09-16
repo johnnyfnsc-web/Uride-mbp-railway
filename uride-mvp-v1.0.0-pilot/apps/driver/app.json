@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "URide Driver",
+    "slug": "uride-driver",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.uride.driver"
+    },
+    "android": {
+      "package": "com.uride.driver"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Permite que URide use tu ubicaci\u00f3n para mostrar recogida, ruta y viajes cercanos."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "enableBackgroundRemoteNotifications": true
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+      }
+    }
+  }
+}

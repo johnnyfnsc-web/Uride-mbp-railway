@@ -1,0 +1,640 @@
+generator client { provider = "prisma-client-js" }
+datasource db { provider = "postgresql"; url = env("DATABASE_URL") }
+
+enum UserRole { PASSENGER DRIVER ADMIN }
+enum DriverStatus { DRAFT PENDING_REVIEW APPROVED SUSPENDED REJECTED }
+enum VehicleStatus { DRAFT PENDING_REVIEW APPROVED SUSPENDED REJECTED }
+enum DriverAvailability { OFFLINE ONLINE ON_TRIP }
+enum TripStatus { REQUESTED SCHEDULED SEARCHING DRIVER_ASSIGNED DRIVER_ARRIVING DRIVER_ARRIVED IN_PROGRESS COMPLETED CANCELLED NO_SHOW NO_DRIVER_FOUND }
+enum PaymentStatus { PENDING PROCESSING SUCCEEDED FAILED ACTION_REQUIRED REFUNDED PARTIALLY_REFUNDED }
+enum PaymentProvider { MOCK STRIPE }
+enum TripOfferStatus { PENDING ACCEPTED REJECTED EXPIRED CANCELLED }
+enum TripCancellationActor { PASSENGER DRIVER SYSTEM }
+enum TripCancellationReason { PASSENGER_CHANGED_MIND PASSENGER_DELAY DRIVER_REQUEST DRIVER_EMERGENCY SAFETY_ISSUE VEHICLE_ISSUE OTHER }
+enum CancellationFeeStatus { NONE WAIVED PENDING CHARGED }
+enum RatingRole { PASSENGER_TO_DRIVER DRIVER_TO_PASSENGER }
+enum SafetyIncidentType { SOS ROUTE_DEVIATION UNUSUAL_STOP ACCIDENT MEDICAL HARASSMENT VEHICLE_ISSUE OTHER }
+enum SafetyIncidentStatus { OPEN ACKNOWLEDGED RESOLVED }
+enum SafetyReporterRole { PASSENGER DRIVER SYSTEM }
+enum SafetyPriority { LOW MEDIUM HIGH CRITICAL }
+enum SafetyActionType { ACKNOWLEDGED NOTE_ADDED ESCALATED TRUSTED_CONTACT_NOTIFIED EMERGENCY_SERVICES_CONTACTED RESOLVED REOPENED }
+enum SupportTicketStatus { OPEN IN_PROGRESS WAITING_USER RESOLVED CLOSED }
+enum SupportPriority { LOW NORMAL HIGH URGENT }
+enum SupportCategory { TRIP PAYMENT CANCELLATION DRIVER_PASSENGER SAFETY LOST_ITEM REFUND DISPUTE OTHER }
+enum LostItemStatus { REPORTED CHECKING FOUND NOT_FOUND RETURN_COORDINATING RETURNED }
+enum RefundStatus { REQUESTED UNDER_REVIEW APPROVED REJECTED PROCESSED }
+enum DriverDocumentType { DRIVER_LICENSE VEHICLE_REGISTRATION VEHICLE_INSURANCE VEHICLE_INSPECTION OTHER }
+enum DriverDocumentStatus { DRAFT PENDING_REVIEW APPROVED REJECTED EXPIRED }
+enum PushPlatform { IOS ANDROID }
+enum NotificationDeliveryStatus { PENDING SENT FAILED }
+enum RiskLevel { LOW MEDIUM HIGH CRITICAL }
+enum RiskSignalType { PAYMENT_FAILURE REPEATED_PAYMENT_FAILURE EXCESSIVE_CANCELLATIONS DEVICE_REUSE RAPID_ACCOUNT_CREATION REFUND_ABUSE CHARGEBACK SUSPICIOUS_LOCATION PROMO_ABUSE MANUAL OTHER }
+enum RiskCaseStatus { OPEN REVIEWING CLEARED RESTRICTED CLOSED }
+enum RiskDecision { CLEAR WATCH RESTRICT SUSPEND }
+enum DriverLedgerType { TRIP_EARNING TIP BONUS ADJUSTMENT REFUND_REVERSAL }
+enum DriverLedgerStatus { PENDING AVAILABLE PAID REVERSED }
+enum AiAudience { PASSENGER DRIVER SUPPORT OPERATIONS }
+enum AiRunStatus { COMPLETED BLOCKED FAILED }
+
+
+model User {
+  id String @id @default(uuid())
+  email String @unique
+  phone String? @unique
+  passwordHash String
+  role UserRole
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  passengerProfile PassengerProfile?
+  driverProfile DriverProfile?
+  passengerTrips Trip[] @relation("PassengerTrips")
+  ratingsGiven Rating[] @relation("RatingsGiven")
+  ratingsReceived Rating[] @relation("RatingsReceived")
+  favoriteDrivers FavoriteDriver[]
+  trustedContacts TrustedContact[]
+  safetyIncidents SafetyIncident[] @relation("SafetyReporter")
+  supportTickets SupportTicket[] @relation("SupportRequester")
+  pushTokens DevicePushToken[]
+  notificationDeliveries NotificationDelivery[]
+  riskScore Int @default(0)
+  riskLevel RiskLevel @default(LOW)
+  tripRequestsBlockedUntil DateTime?
+  paymentsBlockedUntil DateTime?
+  riskReviewedAt DateTime?
+  riskSignals RiskSignal[]
+  riskCases RiskCase[]
+  riskDevices RiskDevice[]
+  aiRuns AiAssistantRun[]
+}
+
+model PassengerProfile {
+  id String @id @default(uuid())
+  userId String @unique
+  firstName String
+  lastName String
+  preferredLanguage String @default("en")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model DriverProfile {
+  id String @id @default(uuid())
+  userId String @unique
+  firstName String
+  lastName String
+  preferredLanguage String @default("en")
+  status DriverStatus @default(DRAFT)
+  availability DriverAvailability @default(OFFLINE)
+  currentLat Float?
+  currentLng Float?
+  lastLocationAt DateTime?
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicles Vehicle[]
+  trips Trip[]
+  offers TripOffer[]
+  favoritedBy FavoriteDriver[]
+  preferredTrips Trip[] @relation("PreferredDriverTrips")
+  documents DriverDocument[]
+  stripeAccountId String? @unique
+  stripeChargesEnabled Boolean @default(false)
+  stripePayoutsEnabled Boolean @default(false)
+  ledgerEntries DriverLedgerEntry[]
+  bonusAwards DriverBonusAward[]
+}
+
+model Vehicle {
+  id String @id @default(uuid())
+  driverProfileId String
+  make String
+  model String
+  year Int
+  color String
+  plate String
+  state String
+  vin String? @unique
+  status VehicleStatus @default(DRAFT)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  driverProfile DriverProfile @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
+  trips Trip[]
+  documents DriverDocument[]
+  @@unique([plate, state])
+}
+
+model PricingRule {
+  id String @id @default(uuid())
+  serviceType String @default("STANDARD")
+  baseFare Decimal @db.Decimal(10,2)
+  perMile Decimal @db.Decimal(10,2)
+  perMinute Decimal @db.Decimal(10,2)
+  bookingFee Decimal @db.Decimal(10,2)
+  minimumFare Decimal @db.Decimal(10,2)
+  platformCommissionRate Decimal @default(0.20) @db.Decimal(5,4)
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Trip {
+  id String @id @default(uuid())
+  passengerUserId String
+  driverProfileId String?
+  preferredDriverProfileId String?
+  returnOfTripId String?
+  vehicleId String?
+  serviceType String @default("STANDARD")
+  status TripStatus @default(REQUESTED)
+  pickupAddress String
+  pickupLat Float
+  pickupLng Float
+  destinationAddress String
+  destinationLat Float
+  destinationLng Float
+  estimatedMiles Float
+  estimatedMinutes Int
+  estimatedFare Decimal @db.Decimal(10,2)
+  finalFare Decimal? @db.Decimal(10,2)
+  requestedAt DateTime @default(now())
+  scheduledFor DateTime?
+  dispatchAfter DateTime?
+  reminder24hSentAt DateTime?
+  reminder1hSentAt DateTime?
+  acceptedAt DateTime?
+  startedAt DateTime?
+  completedAt DateTime?
+  cancelledAt DateTime?
+  cancellationActor TripCancellationActor?
+  cancellationReason TripCancellationReason?
+  cancellationNote String?
+  cancellationFee Decimal? @db.Decimal(10,2)
+  cancellationFeeStatus CancellationFeeStatus @default(NONE)
+  driverArrivedAt DateTime?
+  waitStartedAt DateTime?
+  noShowAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  passenger User @relation("PassengerTrips", fields: [passengerUserId], references: [id])
+  driver DriverProfile? @relation(fields: [driverProfileId], references: [id])
+  preferredDriver DriverProfile? @relation("PreferredDriverTrips", fields: [preferredDriverProfileId], references: [id])
+  vehicle Vehicle? @relation(fields: [vehicleId], references: [id])
+  events TripEvent[]
+  locations TripLocation[]
+  payments Payment[]
+  offers TripOffer[]
+  ratings Rating[]
+  safetyIncidents SafetyIncident[]
+  supportTickets SupportTicket[]
+  lostItems LostItem[]
+  refundRequests RefundRequest[]
+  riskSignals RiskSignal[]
+  @@index([status, requestedAt])
+  @@index([status, scheduledFor])
+  @@index([driverProfileId, status])
+}
+
+model TripEvent {
+  id String @id @default(uuid())
+  tripId String
+  type String
+  actorUserId String?
+  metadata Json?
+  createdAt DateTime @default(now())
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  @@index([tripId, createdAt])
+}
+
+model TripLocation {
+  id String @id @default(uuid())
+  tripId String
+  driverProfileId String
+  lat Float
+  lng Float
+  heading Float?
+  speedMph Float?
+  accuracyMeters Float?
+  recordedAt DateTime @default(now())
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  @@index([tripId, recordedAt])
+  @@index([driverProfileId, recordedAt])
+}
+
+
+model TripOffer {
+  id String @id @default(uuid())
+  tripId String
+  driverProfileId String
+  vehicleId String
+  status TripOfferStatus @default(PENDING)
+  distanceMiles Float
+  offeredAt DateTime @default(now())
+  expiresAt DateTime
+  respondedAt DateTime?
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  driverProfile DriverProfile @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
+  @@index([driverProfileId, status, expiresAt])
+  @@index([tripId, status])
+  @@unique([tripId, driverProfileId])
+}
+
+
+model Rating {
+  id String @id @default(uuid())
+  tripId String
+  fromUserId String
+  toUserId String
+  role RatingRole
+  stars Int
+  comment String?
+  createdAt DateTime @default(now())
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  fromUser User @relation("RatingsGiven", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser User @relation("RatingsReceived", fields: [toUserId], references: [id], onDelete: Cascade)
+  @@unique([tripId, fromUserId])
+  @@index([toUserId, createdAt])
+}
+
+model FavoriteDriver {
+  id String @id @default(uuid())
+  passengerUserId String
+  driverProfileId String
+  createdAt DateTime @default(now())
+  passenger User @relation(fields: [passengerUserId], references: [id], onDelete: Cascade)
+  driverProfile DriverProfile @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
+  @@unique([passengerUserId, driverProfileId])
+  @@index([passengerUserId, createdAt])
+}
+
+
+
+model DriverDocument {
+  id String @id @default(uuid())
+  driverProfileId String
+  vehicleId String?
+  type DriverDocumentType
+  status DriverDocumentStatus @default(DRAFT)
+  documentNumberMasked String?
+  storageKey String
+  issuedAt DateTime?
+  expiresAt DateTime?
+  reviewedAt DateTime?
+  reviewedByAdminUserId String?
+  rejectionReason String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  driverProfile DriverProfile @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
+  vehicle Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  @@index([driverProfileId, type, status])
+  @@index([vehicleId, type, status])
+  @@index([expiresAt, status])
+}
+
+
+model DevicePushToken {
+  id String @id @default(uuid())
+  userId String
+  expoPushToken String @unique
+  platform PushPlatform
+  deviceId String?
+  appVariant String
+  isActive Boolean @default(true)
+  lastSeenAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, isActive])
+}
+
+model NotificationDelivery {
+  id String @id @default(uuid())
+  userId String
+  type String
+  title String
+  body String
+  data Json?
+  status NotificationDeliveryStatus @default(PENDING)
+  providerMessageId String?
+  failureMessage String?
+  createdAt DateTime @default(now())
+  sentAt DateTime?
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+
+model RiskSignal {
+  id String @id @default(uuid())
+  userId String
+  tripId String?
+  paymentId String?
+  type RiskSignalType
+  weight Int
+  deviceHash String?
+  metadata Json?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trip Trip? @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  @@index([userId, createdAt])
+  @@index([type, createdAt])
+  @@index([deviceHash, createdAt])
+}
+
+model RiskCase {
+  id String @id @default(uuid())
+  userId String
+  status RiskCaseStatus @default(OPEN)
+  level RiskLevel
+  scoreAtOpen Int
+  assignedAdminUserId String?
+  decision RiskDecision?
+  reviewNote String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  resolvedAt DateTime?
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([status, level, createdAt])
+  @@index([userId, createdAt])
+}
+
+model RiskDevice {
+  id String @id @default(uuid())
+  userId String
+  deviceHash String
+  platform String?
+  firstSeenAt DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, deviceHash])
+  @@index([deviceHash, lastSeenAt])
+}
+
+
+model AiAssistantRun {
+  id String @id @default(uuid())
+  userId String?
+  audience AiAudience
+  tripId String?
+  supportTicketId String?
+  inputText String
+  responseText String
+  status AiRunStatus @default(COMPLETED)
+  modelProvider String @default("FOUNDATION_RULES")
+  modelName String @default("uride-context-v1")
+  blockedAction String?
+  contextSnapshot Json?
+  createdAt DateTime @default(now())
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  @@index([userId, createdAt])
+  @@index([audience, createdAt])
+  @@index([tripId, createdAt])
+  @@index([supportTicketId, createdAt])
+}
+
+model TrustedContact {
+  id String @id @default(uuid())
+  userId String
+  name String
+  phone String?
+  email String?
+  isPrimary Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, isPrimary])
+}
+
+model SafetyIncident {
+  id String @id @default(uuid())
+  tripId String
+  reporterUserId String?
+  reporterRole SafetyReporterRole
+  type SafetyIncidentType
+  priority SafetyPriority @default(MEDIUM)
+  status SafetyIncidentStatus @default(OPEN)
+  message String?
+  lat Float?
+  lng Float?
+  metadata Json?
+  assignedAdminUserId String?
+  escalationLevel Int @default(0)
+  escalatedAt DateTime?
+  trustedContactNotifiedAt DateTime?
+  emergencyServicesContactedAt DateTime?
+  operatorResolution String?
+  createdAt DateTime @default(now())
+  acknowledgedAt DateTime?
+  resolvedAt DateTime?
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  reporter User? @relation("SafetyReporter", fields: [reporterUserId], references: [id], onDelete: SetNull)
+  actions SafetyAction[]
+  @@index([tripId, createdAt])
+  @@index([status, priority, createdAt])
+}
+
+model SafetyAction {
+  id String @id @default(uuid())
+  incidentId String
+  adminUserId String?
+  type SafetyActionType
+  note String?
+  metadata Json?
+  createdAt DateTime @default(now())
+  incident SafetyIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  @@index([incidentId, createdAt])
+}
+
+
+
+model SafetyShareLink {
+  id String @id @default(uuid())
+  tripId String
+  ownerUserId String
+  tokenHash String @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([tripId, createdAt])
+  @@index([ownerUserId, createdAt])
+}
+
+model SupportTicket {
+  id String @id @default(uuid())
+  tripId String?
+  requesterUserId String
+  category SupportCategory
+  priority SupportPriority @default(NORMAL)
+  status SupportTicketStatus @default(OPEN)
+  subject String
+  description String
+  assignedAgentUserId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  resolvedAt DateTime?
+  trip Trip? @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  requester User @relation("SupportRequester", fields: [requesterUserId], references: [id], onDelete: Cascade)
+  messages SupportMessage[]
+  @@index([status, priority, createdAt])
+  @@index([tripId, createdAt])
+  @@index([requesterUserId, createdAt])
+}
+
+model SupportMessage {
+  id String @id @default(uuid())
+  ticketId String
+  senderUserId String?
+  senderRole String
+  message String
+  createdAt DateTime @default(now())
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  @@index([ticketId, createdAt])
+}
+
+model LostItem {
+  id String @id @default(uuid())
+  tripId String
+  reporterUserId String
+  itemType String
+  description String
+  photoUrl String?
+  status LostItemStatus @default(REPORTED)
+  driverResponse String?
+  returnFee Decimal? @db.Decimal(10,2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  @@index([tripId, status])
+  @@index([reporterUserId, createdAt])
+}
+
+model RefundRequest {
+  id String @id @default(uuid())
+  tripId String
+  requesterUserId String
+  reason String
+  amountRequested Decimal? @db.Decimal(10,2)
+  amountApproved Decimal? @db.Decimal(10,2)
+  status RefundStatus @default(REQUESTED)
+  resolutionNote String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  processedAt DateTime?
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  @@index([tripId, status])
+  @@index([requesterUserId, createdAt])
+}
+
+
+model AdminAuditLog {
+  id String @id @default(uuid())
+  adminUserId String?
+  action String
+  entityType String
+  entityId String?
+  metadata Json?
+  createdAt DateTime @default(now())
+  @@index([createdAt])
+  @@index([entityType, entityId])
+}
+
+
+model DriverLedgerEntry {
+  id String @id @default(uuid())
+  driverProfileId String
+  paymentId String?
+  tripId String?
+  bonusAwardId String?
+  type DriverLedgerType
+  status DriverLedgerStatus @default(AVAILABLE)
+  amount Decimal @db.Decimal(10,2)
+  currency String @default("USD")
+  description String?
+  metadata Json?
+  externalKey String @unique
+  createdAt DateTime @default(now())
+  availableAt DateTime?
+  paidAt DateTime?
+  driverProfile DriverProfile @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  bonusAward DriverBonusAward? @relation(fields: [bonusAwardId], references: [id], onDelete: SetNull)
+  @@index([driverProfileId, createdAt])
+  @@index([driverProfileId, status, createdAt])
+  @@index([paymentId])
+}
+
+model DriverBonusCampaign {
+  id String @id @default(uuid())
+  name String
+  description String?
+  serviceType String?
+  targetTrips Int
+  rewardAmount Decimal @db.Decimal(10,2)
+  startsAt DateTime
+  endsAt DateTime
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  awards DriverBonusAward[]
+  @@index([isActive, startsAt, endsAt])
+}
+
+model DriverBonusAward {
+  id String @id @default(uuid())
+  campaignId String
+  driverProfileId String
+  qualifyingTrips Int
+  rewardAmount Decimal @db.Decimal(10,2)
+  awardedAt DateTime @default(now())
+  campaign DriverBonusCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  driverProfile DriverProfile @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
+  ledgerEntries DriverLedgerEntry[]
+  @@unique([campaignId, driverProfileId])
+  @@index([driverProfileId, awardedAt])
+}
+
+model Payment {
+  id String @id @default(uuid())
+  tripId String
+  provider PaymentProvider @default(MOCK)
+  providerPaymentId String? @unique
+  idempotencyKey String @unique
+  amount Decimal @db.Decimal(10,2)
+  subtotal Decimal? @db.Decimal(10,2)
+  tip Decimal? @db.Decimal(10,2)
+  platformFee Decimal? @db.Decimal(10,2)
+  driverAmount Decimal? @db.Decimal(10,2)
+  currency String @default("USD")
+  status PaymentStatus @default(PENDING)
+  failureCode String?
+  failureMessage String?
+  processedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  receipt Receipt?
+  riskSignals RiskSignal[]
+  ledgerEntries DriverLedgerEntry[]
+  @@index([tripId, createdAt])
+}
+
+model Receipt {
+  id String @id @default(uuid())
+  paymentId String @unique
+  receiptNumber String @unique
+  subtotal Decimal @db.Decimal(10,2)
+  tip Decimal @default(0) @db.Decimal(10,2)
+  adjustments Decimal @default(0) @db.Decimal(10,2)
+  total Decimal @db.Decimal(10,2)
+  currency String @default("USD")
+  issuedAt DateTime @default(now())
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+}
+
+
+model StripeWebhookEvent {
+  id String @id
+  type String
+  processedAt DateTime @default(now())
+  payload Json?
+  @@index([processedAt])
+}

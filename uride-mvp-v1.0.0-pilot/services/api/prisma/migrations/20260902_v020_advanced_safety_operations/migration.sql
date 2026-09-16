@@ -1,0 +1,3 @@
+-- URide Foundation v0.20.0 reference migration.
+-- Apply from schema.prisma using:
+-- npx prisma migrate dev --name v020_advanced_safety_operations

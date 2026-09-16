@@ -1,0 +1,3 @@
+-- URide Foundation v0.15.0 reference migration.
+-- Apply from schema.prisma using:
+-- npx prisma migrate dev --name v015_support_lost_items_refunds

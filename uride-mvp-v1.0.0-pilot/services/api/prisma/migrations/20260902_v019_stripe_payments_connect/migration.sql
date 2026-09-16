@@ -1,0 +1,3 @@
+-- URide Foundation v0.19.0 reference migration.
+-- Apply from schema.prisma using:
+-- npx prisma migrate dev --name v019_stripe_payments_connect

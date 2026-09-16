@@ -1,0 +1,3 @@
+-- URide Foundation v0.13.0 reference migration.
+-- Apply from schema.prisma using:
+-- npx prisma migrate dev --name v013_scheduled_rides
