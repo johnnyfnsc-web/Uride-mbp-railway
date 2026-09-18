@@ -1,5 +1,11 @@
-generator client { provider = "prisma-client-js" }
-datasource db { provider = "postgresql"; url = env("DATABASE_URL") }
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
 
 enum UserRole { PASSENGER DRIVER ADMIN }
 enum DriverStatus { DRAFT PENDING_REVIEW APPROVED SUSPENDED REJECTED }
